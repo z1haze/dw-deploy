@@ -2,78 +2,95 @@
 set -e
 set -o pipefail
 
+function usage() {
+    cat <<EOF
+Usage: dwdeploy [-z cartridges path] [-v code version] [-h webdav host] [-u webdav user] [-p webdav password] [-c webdav certificate] [-x webdav cert password] [-d debug mode] [-? help]
+    -z  the path of the zip archive of cartridges to transfer
+    -v  the code version name to apply to the payload
+    -h  the webdav host
+    -u  the webdav user
+    -p  the webdav password
+    -c  the webdav certificate
+    -x  the password/key for the webdav certificate
+    -d  debug
+    -?  help
+EOF
+}
+
+MISSING_ARG=false
+
 # Get our options
-while getopts 'zvhupdcx:' OPTION; do
-  case "$OPTION" in
-    z)
-      ZIP=${OPTARG}
-      ;;
-    h)
-      WEBDAV_HOST=${OPTARG}
-      ;;
-    u)
-      WEBDAV_USER=${OPTARG}
-      ;;
-    p)
-      WEBDAV_PASS=${OPTARG}
-      ;;
-    v)
-      CODE_VERSION=${OPTARG}
-      ;;
-    d)
-      DEBUG=${OPTARG}
-      ;;
-    c)
-      CERT=${OPTARG}
-      ;;
-    x)
-      CERT_PASS=${OPTARG}
-      ;;
+while getopts 'z:v:h:u:p:dc:x:' opt; do
+  case "$opt" in
+    z )  ZIP=${OPTARG} ;;
+    v )  CODE_VERSION=${OPTARG} ;;
+    h )  HOST=${OPTARG} ;;
+    u )  USER=${OPTARG} ;;
+    p )  PASSWORD=${OPTARG} ;;
+    d )  DEBUG=true ;;
+    c )  CERT=${OPTARG} ;;
+    x )  CERT_PASSWORD=${OPTARG} ;;
+    \?)  usage ;;
   esac
 done
 
-if [ -z "${ZIP}" ]; then
-    fail "You need to set `z` to a .zip of your cartridges"
+shift "$((OPTIND - 1))"
+
+if [ -z "$ZIP" ]; then
+    echo "-z (ZIP) is required"
+    MISSING_ARG=true
 fi
 
-if [ -z "${WEBDAV_HOST}" ]; then
-    fail "You need to set `hostname` to the hostname of the Demandware server"
+if [ -z "$HOST" ]; then
+    echo "-h (HOST) is required"
+    MISSING_ARG=true
 fi
 
-if [ -z "${WEBDAV_USER}" ]; then
-    fail "You need to set `username` to the webdav user"
+if [ -z "$USER" ]; then
+    echo "-u (USER) is required"
+    MISSING_ARG=true
 fi
 
-if [ -z "${WEBDAV_PASS}" ]; then
-    fail "You need to set `password` to the webdav user's password"
+if [ -z "$PASSWORD" ]; then
+    echo "-p (PASSWORD) is required"
+    MISSING_ARG=true
 fi
 
-if [ -z "${CODE_VERSION}" ]; then
-    fail "You need to set `password` to the webdav user's password"
+if [ -z "$CODE_VERSION" ]; then
+    echo "-v is required to specify the code version"
+    MISSING_ARG=true
 fi
 
-if [ -z "${CERT}" ]; then
-    if [ "${DEBUG}" ]; then
-        curl --verbose -u ${WEBDAV_USER}:${WEBDAV_PASS} -X MKCOL "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}"
+if [ -z "$MISSING_ARG" ]; then
+    exit 1
+fi
+
+if [ -z "$CERT" ]; then
+    if [ "$DEBUG" ]; then
+        curl --verbose -u "${USER}:${PASSWORD}" -X MKCOL "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}"
     fi
 
-    response=$(curl --write-out %{http_code} --silent --output /dev/null -u ${WEBDAV_USER}:${WEBDAV_PASS} -X MKCOL "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
+    # for staging deployments because it requires 2 factor auth using keys
+    response=$(curl --write-out %'{'http_code'}' --silent --output /dev/null -u "${USER}:${PASSWORD}" -X MKCOL "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
 
-    if [ $response -eq 201 ]; then
-        curl -u ${WEBDAV_USER}:${WEBDAV_PASS} -T ${ZIP} "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
-        curl -u ${WEBDAV_USER}:${WEBDAV_PASS} --data "method=UNZIP" "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
-        curl -u ${WEBDAV_USER}:${WEBDAV_PASS} -X DELETE "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+    if [ "$response" -eq 201 ]; then
+        curl -u "${USER}:${PASSWORD}" -T "${ZIP}" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+        curl -u "${USER}:${PASSWORD}" --data "method=UNZIP" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+        curl -u "${USER}:${PASSWORD}" -X DELETE "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
     else
-        fail "Unauthorized Request. Check your username and password"
+        echo "Unauthorized Request. Check your username and password"
+        exit 1
     fi
 else
-    response=$(curl --write-out %{http_code} --silent --output /dev/null --cert ${CERT}:${CERT_PASS} -k -u ${WEBDAV_USER}:${WEBDAV_PASS} -X MKCOL "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
+    # for development/sandbox deployments where 2 factor auth using keys is not required
+    response=$(curl --write-out %'{'http_code'}' --silent --output /dev/null --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" -X MKCOL "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
 
-    if [ $response -eq 201 ]; then
-        curl --cert ${CERT}:${CERT_PASS} -k -u ${WEBDAV_USER}:${WEBDAV_PASS} -T ${ZIP} "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
-        curl --cert ${CERT}:${CERT_PASS} -k -u ${WEBDAV_USER}:${WEBDAV_PASS} --data "method=UNZIP" "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
-        curl --cert ${CERT}:${CERT_PASS} -k -u ${WEBDAV_USER}:${WEBDAV_PASS} -X DELETE "https://${WEBDAV_HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+    if [ "$response" -eq 201 ]; then
+        curl --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" -T "${ZIP}" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+        curl --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" --data "method=UNZIP" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+        curl --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" -X DELETE "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
     else
-        fail "Unauthorized Request. Check your username and password"
+        echo "Unauthorized Request. Check your username and password"
+        exit 1
     fi
 fi
