@@ -1,18 +1,6 @@
 #!/bin/bash
 set -e
-set -u
 set -o pipefail
-
-# initialize empty variables
-OPTARG=""
-ZIP=""
-WEBDAV_HOST=""
-WEBDAV_USER=""
-WEBDAV_PASS=""
-CODE_VERSION=""
-DEBUG=""
-CERT=""
-CERT_PASS=""
 
 # Get our options
 while getopts 'zvhupdcx:' OPTION; do
