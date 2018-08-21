@@ -64,9 +64,7 @@ if [ -z "$MISSING_ARG" ]; then
 fi
 
 if [ -z "$CERT" ]; then
-    echo "empty cert"
-    response=$(curl --write-out %'{'http_code'}' --silent --output /dev/null -u "${USER}:${PASSWORD}" -X MKCOL "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
-
+    response=$(curl -ks -o /dev/null -w "%{http_code}" -u "${USER}:${PASSWORD}" -X MKCOL "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
     if [ "$response" -eq 201 ]; then
         curl -u "${USER}:${PASSWORD}" -T "${ZIP}" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
         curl -u "${USER}:${PASSWORD}" --data "method=UNZIP" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
@@ -76,14 +74,11 @@ if [ -z "$CERT" ]; then
         exit 1
     fi
 else
-    echo "cert present"
-    response=$(curl --write-out %'{'http_code'}' --silent --output /dev/null --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" -X MKCOL "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
-    echo $response
+    response=$(curl -ks -o /dev/null -w "%{http_code}" -u "${USER}:${PASSWORD}" -E "${CERT}:${CERT_PASSWORD}" -X MKCOL "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}")
     if [ "$response" -eq 201 ]; then
-        echo "Response is 201"
-        curl --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" -T "${ZIP}" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
-        curl --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" --data "method=UNZIP" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
-        curl --cert "${CERT}:${CERT_PASSWORD}" -k -u "${USER}:${PASSWORD}" -X DELETE "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+        curl -k -E "${CERT}:${CERT_PASSWORD}" -u "${USER}:${PASSWORD}" -T "${ZIP}" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+        curl -k -E "${CERT}:${CERT_PASSWORD}" -u "${USER}:${PASSWORD}" --data "method=UNZIP" "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
+        curl -k -E "${CERT}:${CERT_PASSWORD}" -u "${USER}:${PASSWORD}" -X DELETE "https://${HOST}/on/demandware.servlet/webdav/Sites/Cartridges/${CODE_VERSION}/cartridges.zip"
     else
         echo "Unauthorized Request. Check your username and password"
         exit 1
